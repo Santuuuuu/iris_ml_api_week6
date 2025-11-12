@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: iris-app
-        image: ghcr.io/santuuuuu/iris_ml_api_week6:latest  # GitHub Container Registry
+        image: ghcr.io/santuuuuu/iris_ml_api_week6:latest
         ports:
         - containerPort: 8080
         env:

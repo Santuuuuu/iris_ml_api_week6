@@ -4,6 +4,7 @@ import pickle
 import os
 import time
 import logging
+import math
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 app = Flask(__name__)
@@ -35,12 +36,32 @@ REQUEST_COUNT = Counter('request_count', 'App Request Count',
 REQUEST_LATENCY = Histogram('request_latency_seconds', 'Request latency', 
                            ['endpoint'])
 
+def cpu_intensive_operation():
+    """Perform CPU-intensive calculations to simulate model inference"""
+    start_time = time.time()
+    
+    # Simulate complex model inference with multiple calculations
+    result = 0
+    for i in range(1000):  # Increased from 100 to 1000 iterations
+        # Perform some mathematical operations
+        result += math.sqrt(i) * math.sin(i) * math.cos(i)
+        result += math.exp(0.01 * i) * math.log(i + 1)
+        
+        # Matrix multiplication simulation
+        matrix_size = 50
+        for j in range(matrix_size):
+            for k in range(matrix_size):
+                result += j * k * 0.001
+    
+    processing_time = time.time() - start_time
+    return result, processing_time
+
 @app.route('/')
 def home():
     return jsonify({
-        "message": "IRIS Classification API",
+        "message": "IRIS Classification API (CPU Intensive)",
         "endpoints": ["/health", "/metrics", "/predict"],
-        "version": "1.0",
+        "version": "2.0",
         "project": "warm-access-473514-i7"
     })
 
@@ -72,23 +93,27 @@ def predict():
             REQUEST_COUNT.labels('POST', '/predict', '400').inc()
             return jsonify({'error': 'Expected 4 features'}), 400
         
-        # Simulate some processing time
-        time.sleep(0.01)
+        # Perform CPU-intensive operations
+        cpu_result, cpu_time = cpu_intensive_operation()
         
+        # Get prediction (this also uses some CPU)
         prediction = model.predict(features)
         probabilities = model.predict_proba(features)
         
-        processing_time = time.time() - start_time
-        logger.info(f"Prediction completed in {processing_time:.3f}s")
+        total_processing_time = time.time() - start_time
+        
+        logger.info(f"Prediction completed in {total_processing_time:.3f}s (CPU: {cpu_time:.3f}s)")
         
         REQUEST_COUNT.labels('POST', '/predict', '200').inc()
-        REQUEST_LATENCY.labels('/predict').observe(processing_time)
+        REQUEST_LATENCY.labels('/predict').observe(total_processing_time)
         
         response = {
             'prediction': int(prediction),
             'probabilities': probabilities[0].tolist(),
-            'processing_time': processing_time,
-            'pod': os.environ.get('HOSTNAME', 'unknown')
+            'processing_time': total_processing_time,
+            'cpu_intensive_time': cpu_time,
+            'pod': os.environ.get('HOSTNAME', 'unknown'),
+            'cpu_calculation_result': round(cpu_result, 4)
         }
         
         return jsonify(response)

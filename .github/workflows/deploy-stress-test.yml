@@ -1,0 +1,138 @@
+name: Deploy and Stress Test IRIS Classification
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  GKE_CLUSTER: iris-cluster
+  GKE_ZONE: us-central1
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}:latest
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+  deploy-and-test:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup GCP Authentication
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up GKE credentials
+      uses: google-github-actions/get-gke-credentials@v1
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+
+    - name: Deploy application
+      run: |
+        kubectl apply -f deployment-github.yaml
+        kubectl apply -f hpa.yaml
+        kubectl rollout status deployment/iris-classification --timeout=300s
+
+    - name: Install stress testing tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wrk jq
+
+    - name: Wait for service to be ready
+      run: |
+        echo "Waiting for external IP..."
+        for i in {1..30}; do
+          EXTERNAL_IP=$(kubectl get service iris-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -n "$EXTERNAL_IP" ]; then
+            echo "EXTERNAL_IP=$EXTERNAL_IP" >> $GITHUB_ENV
+            echo "Service IP: $EXTERNAL_IP"
+            break
+          fi
+          echo "Attempt $i/30: Waiting for external IP..."
+          sleep 10
+        done
+
+    - name: Run health check
+      run: |
+        curl -s http://$EXTERNAL_IP/health | jq . || exit 1
+
+    - name: Run stress tests
+      run: |
+        echo "=== STRESS TESTING ==="
+        
+        cat > stress-test.lua << 'SCRIPT'
+        wrk.method = "POST"
+        wrk.headers["Content-Type"] = "application/json"
+        
+        request = function()
+            local sepal_length = 4 + math.random() * 4
+            local sepal_width = 2 + math.random() * 2
+            local petal_length = 1 + math.random() * 5
+            local petal_width = 0.1 + math.random() * 2
+            
+            local body = string.format('{"features": [%.2f, %.2f, %.2f, %.2f]}', 
+                sepal_length, sepal_width, petal_length, petal_width)
+            
+            wrk.body = body
+            return wrk.format()
+        end
+        SCRIPT
+
+        echo "=== 1000 Concurrent Requests ==="
+        wrk -t10 -c1000 -d30s -s stress-test.lua http://$EXTERNAL_IP/predict > results_1000.txt
+        cat results_1000.txt
+        
+        echo "=== 2000 Concurrent Requests ==="
+        wrk -t20 -c2000 -d30s -s stress-test.lua http://$EXTERNAL_IP/predict > results_2000.txt
+        cat results_2000.txt
+
+    - name: Verify auto-scaling
+      run: |
+        echo "=== AUTO-SCALING VERIFICATION ==="
+        kubectl get hpa
+        kubectl get pods -l app=iris-classification
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: stress-test-results
+        path: |
+          results_1000.txt
+          results_2000.txt
+
+    - name: Cleanup
+      if: always()
+      run: |
+        kubectl delete -f deployment-github.yaml || true
+        kubectl delete -f hpa.yaml || true
