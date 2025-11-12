@@ -36,8 +36,8 @@ jobs:
         context: .
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ghcr.io/santuuuuu/iris_ml_api_week6:latest
+          ghcr.io/santuuuuu/iris_ml_api_week6:${{ github.sha }}
 
   deploy-and-test:
     runs-on: ubuntu-latest
@@ -122,6 +122,43 @@ jobs:
         echo "=== AUTO-SCALING VERIFICATION ==="
         kubectl get hpa
         kubectl get pods -l app=iris-classification
+        
+        POD_COUNT=$(kubectl get pods -l app=iris-classification --no-headers | wc -l)
+        echo "Current pod count: $POD_COUNT"
+        
+        if [ "$POD_COUNT" -gt 1 ]; then
+          echo "✅ AUTO-SCALING SUCCESS: Scaled to $POD_COUNT pods"
+        else
+          echo "⚠️  Auto-scaling may not have triggered"
+        fi
+
+    - name: Single pod bottleneck test
+      run: |
+        echo "=== SINGLE POD BOTTLENECK TEST ==="
+        
+        kubectl patch hpa iris-hpa -p '{"spec":{"maxReplicas":1}}'
+        echo "Waiting for scale-down..."
+        sleep 60
+        
+        echo "Testing 2000 concurrent requests on SINGLE pod..."
+        wrk -t20 -c2000 -d30s -s stress-test.lua http://$EXTERNAL_IP/predict > results_single_pod_2000.txt
+        cat results_single_pod_2000.txt
+
+    - name: Generate test report
+      run: |
+        echo "## 🚀 Stress Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Auto-scaling Performance" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat results_1000.txt >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        cat results_2000.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Single Pod Bottleneck" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat results_single_pod_2000.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -130,6 +167,7 @@ jobs:
         path: |
           results_1000.txt
           results_2000.txt
+          results_single_pod_2000.txt
 
     - name: Cleanup
       if: always()
