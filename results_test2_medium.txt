@@ -1,0 +1,68 @@
+Running 30s test @ http://34.133.156.55/predict
+  4 threads and 50 connections
+Completed 100 requests
+Completed 100 requests
+Completed 100 requests
+Completed 100 requests
+Completed 200 requests
+Completed 200 requests
+Completed 200 requests
+Completed 200 requests
+Completed 300 requests
+Completed 300 requests
+Completed 300 requests
+Completed 300 requests
+Completed 400 requests
+Completed 400 requests
+Completed 400 requests
+Completed 400 requests
+Completed 500 requests
+Completed 500 requests
+Completed 500 requests
+Completed 500 requests
+Completed 600 requests
+Completed 600 requests
+Completed 600 requests
+Completed 600 requests
+Completed 700 requests
+Completed 700 requests
+Completed 700 requests
+Completed 700 requests
+Completed 800 requests
+Completed 800 requests
+Completed 800 requests
+Completed 800 requests
+Completed 900 requests
+Completed 900 requests
+Completed 900 requests
+Completed 900 requests
+Completed 1000 requests
+Completed 1000 requests
+Completed 1000 requests
+Completed 1000 requests
+Completed 1100 requests
+Completed 1100 requests
+Completed 1100 requests
+Completed 1100 requests
+Completed 1200 requests
+Completed 1200 requests
+Completed 1200 requests
+Completed 1200 requests
+Completed 1300 requests
+Completed 1300 requests
+Completed 1300 requests
+Completed 1300 requests
+Completed 1400 requests
+Completed 1400 requests
+Completed 1400 requests
+Completed 1400 requests
+Completed 1500 requests
+Completed 1500 requests
+Completed 1500 requests
+Completed 1500 requests
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   232.60ms   77.96ms 562.97ms   64.06%
+    Req/Sec    51.08     16.46   100.00     61.69%
+  6124 requests in 30.03s, 1.73MB read
+Requests/sec:    203.93
+Transfer/sec:     58.88KB
